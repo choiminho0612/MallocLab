@@ -61,6 +61,7 @@ static void *find_fit(size_t asize);
 static void place(void *ptr, size_t asize);
 
 static char *heap_listp = NULL;
+static char *next_bp = NULL;        /* For next fit*/
 
 
 int mm_init(void)
@@ -73,10 +74,12 @@ int mm_init(void)
     PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1));    /* Prologue footer */
     PUT(heap_listp + (3 * WSIZE), PACK(0, 1));        /* Epilogue header */
     heap_listp += (2*WSIZE);
-
+    next_bp = heap_listp;
+    
     /*Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
         return -1;
+
     return 0;
 }
 
@@ -172,6 +175,7 @@ static void *coalesce(void *bp)
     size_t size = GET_SIZE(HDRP(bp));
 
     if (prev_alloc && next_alloc) {                 /* Case 1 */
+        next_bp = bp;
         return bp;
     }
 
@@ -194,19 +198,29 @@ static void *coalesce(void *bp)
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
+    next_bp = bp;
     return bp;
 }
 
 static void *find_fit(size_t asize)
 {
-    /* First-fit search */
+    /* Next-fit search */
     void *bp;
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    for (bp = next_bp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            next_bp = bp;
             return bp;
         }
     }
+
+    for (bp = heap_listp; bp != next_bp ; bp = NEXT_BLKP(bp)) {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            next_bp = bp;
+            return bp;
+        }
+    }
+
     return NULL; /* No fit */
 }
 
